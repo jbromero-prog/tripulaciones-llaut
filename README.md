@@ -1,6 +1,6 @@
 # Tripulaciones Llaüt · CRCV
 
-App Android del Club de Remo Ciudad de Valencia para cuadrar las tripulaciones de los llaüts de competición: se marca quién ha venido a la sesión y genera alineaciones alternativas respetando la banda de cada remero y equilibrando peso, altura y experiencia.
+App Android del Club de Remo Ciudad de Valencia para cuadrar las tripulaciones de los llaüts de competición: se marca quién ha venido a la sesión y genera alineaciones alternativas respetando la banda de cada remero y equilibrando peso y experiencia. Cada llaüt lleva 8 remeros y puede salir con 6 o 7; si no hay gente para dos llaüts sale uno y el resto queda en reserva con cambios sugeridos.
 
 ## Descargar e instalar
 
@@ -23,7 +23,7 @@ La app lee la hoja de Google *Plantilla Tripulaciones Llaüt* (carpeta Coordinac
 | Nombre | Nombre y apellido, único dentro de la pestaña |
 | Banda | B (babor), E (estribor) o A (ambas) |
 | Experiencia | 1 (iniciación) a 5 (experto) |
-| Altura | cm |
+| Altura | cm (opcional, la app no la usa para alinear) |
 | Peso | kg |
 | Patrón | sí / no |
 

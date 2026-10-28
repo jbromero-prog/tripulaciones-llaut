@@ -139,6 +139,8 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .m b{font-family:var(--f-data);font-weight:500;font-size:14px}
 .m.ok b{color:var(--estribor)} .m.bad b{color:var(--babor)}
 .reserve{font-size:13px;color:var(--muted);margin:0}
+.changes{display:flex;flex-direction:column;gap:6px}
+.chg{display:flex;flex-direction:column;gap:1px;background:var(--surface-2);border-radius:8px;padding:7px 10px;font-size:14px}
 .reserve b{color:var(--ink)}
 
 /* Plantilla */
@@ -181,9 +183,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 
         <div class="block">
           <h2>Barcos</h2>
+          <p class="hint">Cada llaüt lleva 8 remeros y puede salir con un mínimo de 6. Si no hay gente para dos, sale uno y el resto queda en reserva con cambios sugeridos.</p>
           <div class="row">
-            <div class="field"><span class="lbl">Llaüts</span><div class="seg" id="seg-boats"><button data-v="1" aria-pressed="true">1</button><button data-v="2" aria-pressed="false">2</button></div></div>
-            <div class="field"><label for="benches">Bancos por barco</label><select id="benches"><option value="3">3 (6 remeros)</option><option value="4" selected>4 (8 remeros)</option><option value="5">5 (10 remeros)</option><option value="6">6 (12 remeros)</option></select></div>
+            <div class="field"><span class="lbl">Llaüts disponibles</span><div class="seg" id="seg-boats"><button data-v="1" aria-pressed="true">1</button><button data-v="2" aria-pressed="false">2</button></div></div>
           </div>
           <div class="row" id="cox-row"></div>
           <div class="field" id="split-field" hidden><label for="split">Reparto entre barcos</label><select id="split"><option value="eq">Igualados en experiencia</option><option value="a">Llaüt 1 con los más expertos</option></select></div>
@@ -242,9 +244,10 @@ const N=window.Native||null;
 let roster=[],issues=[];
 const cache=LS.get("crcv-cache",null);
 if(cache&&Array.isArray(cache.roster)){roster=cache.roster;issues=cache.issues||[]}
-const S=Object.assign({att:[],boats:1,benches:4,cox:["",""],split:"eq",teams:[],w:{lat:3,alt:2,marca:2,mix:2,proa:1},sheet:DEFAULT_SHEET,gid:""},LS.get("crcv-sesion",{}));
+const S=Object.assign({att:[],boats:1,cox:["",""],split:"eq",teams:[],w:{lat:3,marca:2,mix:2,proa:1},sheet:DEFAULT_SHEET,gid:""},LS.get("crcv-sesion",{}));
 if(OLD_SHEETS.includes(S.sheet)){S.sheet=DEFAULT_SHEET;S.gid=""}
 const saveS=()=>LS.set("crcv-sesion",S);
+delete S.benches;if(S.w)delete S.w.alt;
 roster.forEach(r=>{if(!Array.isArray(r.equipos))r.equipos=r.equipo?[r.equipo]:[]});
 let lastResults=null;
 
@@ -288,7 +291,7 @@ function rosterFromCSV(text,tab){
   const find=(...ks)=>head.findIndex(h=>ks.includes(h));
   const col={nombre:find("nombre","remero","remera","nom"),banda:find("banda","lado"),exp:find("experiencia","exp","nivel"),altura:find("altura","talla","alturacm"),peso:find("peso","pesokg"),equipo:find("equipo","categoria"),patron:find("patron","patrona","timonel")};
   if(tab&&col.nombre<0)return{roster:[],issues:[],noTable:true};
-  const miss=["nombre","banda","altura","peso"].filter(k=>col[k]<0);
+  const miss=["nombre","banda","peso"].filter(k=>col[k]<0);
   if(miss.length)throw new Error("Faltan columnas"+(tab?" en la pestaña "+tab:" en la hoja")+": "+miss.join(", ")+".");
   const P=tab?tab+", fila ":"Fila ";
   const out=[],iss=[],seen=new Set();
@@ -300,7 +303,8 @@ function rosterFromCSV(text,tab){
     if(seen.has(id)){iss.push(`${P}${line}: «${nombre}» está repetido, se ignora.`);return}
     let alt=num(g("altura"));if(alt>0&&alt<3)alt=alt*100;
     const peso=num(g("peso"));
-    if(!(alt>=120&&alt<=230)){iss.push(`${P}${line}: altura de «${nombre}» no válida, se ignora.`);return}
+    if(g("altura")&&!(alt>=120&&alt<=230))iss.push(`${P}${line}: altura de «${nombre}» no válida, se deja en blanco.`);
+    if(!(alt>=120&&alt<=230))alt=0;
     if(!(peso>=30&&peso<=160)){iss.push(`${P}${line}: peso de «${nombre}» no válido, se ignora.`);return}
     let banda=parseBanda(g("banda"));if(!banda){iss.push(`${P}${line}: banda de «${nombre}» no reconocida, se toma como Ambas.`);banda="A"}
     let exp=parseInt(g("exp"),10);if(!(exp>=1&&exp<=5)){if(g("exp"))iss.push(`${P}${line}: experiencia de «${nombre}» fuera de 1–5, se toma 3.`);exp=3}
@@ -385,7 +389,7 @@ function renderAtt(){
   const set=new Set(S.att);const vis=visibleRoster();
   $("#att-list").innerHTML=vis.length?vis.map(r=>`<button data-id="${esc(r.id)}" aria-pressed="${set.has(r.id)}">
       <span class="box">${set.has(r.id)?"✓":""}</span>
-      <span style="min-width:0"><span class="nm">${esc(r.nombre)}</span><span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span></span></span>
+      <span style="min-width:0"><span class="nm">${esc(r.nombre)}</span><span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura?r.altura+" cm · ":""}${r.peso} kg</span></span></span>
       <span class="side ${r.banda}">${r.banda==="A"?"B/E":r.banda}</span></button>`).join("")
     :'<p class="hint">No hay remeros. Añádelos en la hoja de Google y pulsa Actualizar en la pestaña Plantilla.</p>';
   const at=attendees();
@@ -405,57 +409,74 @@ function renderCox(){
   $("#cox-row").innerHTML=h;
   $("#split-field").hidden=S.boats<2;
   document.querySelectorAll("#seg-boats button").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.v===S.boats)));
-  $("#benches").value=String(S.benches);$("#split").value=S.split;
+  $("#split").value=S.split;
 }
-function rowersForSession(){const cox=new Set(S.cox.slice(0,S.boats).filter(Boolean));return attendees().filter(r=>!cox.has(r.id))}
+const NB=4,SEATS_PER=8,MIN_CREW=6;
+function plan(){
+  const at=attendees();
+  const c0=S.cox[0]||"",c1=S.boats===2?(S.cox[1]||""):"";
+  const two=at.filter(r=>r.id!==c0&&r.id!==c1);
+  if(S.boats===2&&two.length>=2*MIN_CREW)return{boats:2,rw:two,cox:[c0,c1]};
+  return{boats:1,rw:at.filter(r=>r.id!==c0),cox:[c0],dropped:S.boats===2};
+}
+function rowersForSession(){return plan().rw}
 function renderNotes(){
-  const rw=rowersForSession(),per=S.benches,seats=S.boats*per*2,sideSeats=S.boats*per;
+  const P=plan(),rw=P.rw,n=rw.length,seats=P.boats*SEATS_PER,side=P.boats*NB;
   const nB=rw.filter(r=>r.banda==="B").length,nE=rw.filter(r=>r.banda==="E").length;
-  const n=[];
-  if(rw.length&&rw.length<seats)n.push(`Faltan ${seats-rw.length} remeros para completar ${S.boats>1?"los dos llaüts":"el llaüt"}: quedarán plazas vacías.`);
-  if(rw.length>seats)n.push(`Sobran ${rw.length-seats}: quedarán en reserva.${S.boats===1&&rw.length>=seats+6?" Con este número puedes sacar el segundo llaüt.":""}`);
-  if(nB>sideSeats)n.push(`Hay ${nB} remeros solo de babor para ${sideSeats} plazas de babor.`);
-  if(nE>sideSeats)n.push(`Hay ${nE} remeros solo de estribor para ${sideSeats} plazas de estribor.`);
-  if(S.boats===2&&S.cox[0]&&S.cox[0]===S.cox[1])n.push("El mismo patrón está asignado a los dos llaüts.");
-  $("#notes").innerHTML=n.map(t=>`<div class="note">${esc(t)}</div>`).join("");
-  $("#go").disabled=rw.length<2;
+  const out=[];
+  if(n&&n<MIN_CREW)out.push(`Hacen falta al menos ${MIN_CREW} remeros para sacar un llaüt (hay ${n}).`);
+  else if(n){
+    if(P.dropped)out.push(`Con ${n} remeros no salen dos llaüts (mínimo ${MIN_CREW} en cada uno). Sale uno${n>SEATS_PER?` y ${n-SEATS_PER} quedan en reserva para cambios`:""}.`);
+    else if(P.boats===2&&n<seats)out.push(`Salen los dos llaüts con ${n} remeros: alguno irá incompleto (mínimo ${MIN_CREW} por barco).`);
+    else if(P.boats===1&&n<SEATS_PER)out.push(`El llaüt saldrá con ${n} remeros.`);
+    if(n>seats&&!P.dropped)out.push(`Quedan ${n-seats} en reserva para cambios.`);
+  }
+  if(nB>side)out.push(`Hay ${nB} remeros solo de babor para ${side} plazas de babor.`);
+  if(nE>side)out.push(`Hay ${nE} remeros solo de estribor para ${side} plazas de estribor.`);
+  if(P.dropped&&S.cox[1]&&attendees().some(r=>r.id===S.cox[1]))out.push("El patrón asignado al llaüt 2 entra como remero.");
+  if(S.boats===2&&S.cox[0]&&S.cox[0]===S.cox[1])out.push("El mismo patrón está asignado a los dos llaüts.");
+  $("#notes").innerHTML=out.map(t=>`<div class="note">${esc(t)}</div>`).join("");
+  $("#go").disabled=n<MIN_CREW;
 }
 
 /* ---------- Criterios ---------- */
-const CRIT=[["lat","Equilibrio babor/estribor","Peso total igual a cada banda"],["alt","Parejas de altura","Compañeros de banco de talla similar"],["marca","Experiencia en marca","Los más expertos junto al patrón"],["mix","Repartir experiencia","Sin dos noveles en el mismo banco"],["proa","Proa ligera","Los más pesados lejos de proa"]];
+const CRIT=[["lat","Equilibrio babor/estribor","Peso total igual a cada banda"],["marca","Experiencia en marca","Los más expertos junto al patrón"],["mix","Repartir experiencia","Sin dos noveles en el mismo banco"],["proa","Proa ligera","Los más pesados lejos de proa"]];
 function renderSliders(){
   $("#sliders").innerHTML=CRIT.map(([k,t,d])=>`<div class="sl"><label for="w-${k}">${t}<small>${d}</small></label><input type="range" id="w-${k}" min="0" max="5" step="1" value="${S.w[k]}" data-k="${k}"><output id="o-${k}">${S.w[k]}</output></div>`).join("");
 }
 
 /* ---------- Optimizador ---------- */
 function solve(rw,cfg){
-  const n=rw.length,nb=cfg.benches,boats=cfg.boats,SEATS=boats*nb*2,L=Math.max(SEATS,n),W=cfg.w;
-  const wt=rw.map(r=>+r.peso||0),ht=rw.map(r=>+r.altura||0),ex=rw.map(r=>+r.exp||1),bd=rw.map(r=>r.banda);
-  const meanW=n?wt.reduce((a,b)=>a+b,0)/n:0,forcedEmpty=Math.max(0,SEATS-n);
+  const n=rw.length,boats=cfg.boats,SEATS=boats*SEATS_PER,L=Math.max(SEATS,n),W=cfg.w;
+  const wt=rw.map(r=>+r.peso||0),ex=rw.map(r=>+r.exp||1),bd=rw.map(r=>r.banda);
+  const meanW=n?wt.reduce((a,b)=>a+b,0)/n:0;
   const ok=(who,p)=>who<0||p>=SEATS||bd[who]==="A"||(bd[who]==="B")===(p%2===0);
-  // asiento = ((barco*nb)+banco)*2 + lado ; banco 0 = proa, nb-1 = marca ; lado 0 babor, 1 estribor
+  // asiento = ((barco*NB)+banco)*2 + lado ; banco 0 = proa, 3 = marca ; lado 0 babor, 1 estribor
   function cost(a,detail){
-    let total=0,empties=0;const per=[],boatExp=[];
+    let total=0,empties=0,seated=0;const per=[],boatExp=[];
     for(let b=0;b<boats;b++){
-      let wB=0,wE=0,altSum=0,altN=0,mixPen=0,cnt=0,expSum=0;const benchExp=[];
-      for(let k=0;k<nb;k++){
-        const pB=(b*nb+k)*2,iB=a[pB],iE=a[pB+1];
-        if(iB<0)empties++;else{wB+=wt[iB];cnt++;expSum+=ex[iB]}
-        if(iE<0)empties++;else{wE+=wt[iE];cnt++;expSum+=ex[iE]}
-        if(iB>=0&&iE>=0){altSum+=Math.abs(ht[iB]-ht[iE]);altN++;if(ex[iB]<=2&&ex[iE]<=2)mixPen+=2;benchExp.push(ex[iB]+ex[iE])}
+      let wB=0,wE=0,nB=0,nE=0,mixPen=0,cnt=0,expSum=0,half=0;const benchExp=[];
+      for(let k=0;k<NB;k++){
+        const pB=(b*NB+k)*2,iB=a[pB],iE=a[pB+1];
+        if(iB<0)empties++;else{wB+=wt[iB];nB++;cnt++;expSum+=ex[iB]}
+        if(iE<0)empties++;else{wE+=wt[iE];nE++;cnt++;expSum+=ex[iE]}
+        if(iB>=0&&iE>=0){if(ex[iB]<=2&&ex[iE]<=2)mixPen+=2;benchExp.push(ex[iB]+ex[iE])}
+        else if(iB>=0||iE>=0)half++;
       }
-      const dLat=Math.abs(wB-wE),dAlt=altN?altSum/altN:0;
-      const m0=(b*nb+nb-1)*2,mk=[a[m0],a[m0+1]].filter(i=>i>=0);
+      seated+=cnt;
+      const dLat=Math.abs(wB-wE);
+      const m0=(b*NB+NB-1)*2,mk=[a[m0],a[m0+1]].filter(i=>i>=0);
       const marcaExp=mk.length?mk.reduce((s,i)=>s+ex[i],0)/mk.length:0;
-      const pr=[a[b*nb*2],a[b*nb*2+1]].filter(i=>i>=0);
+      const pr=[a[b*NB*2],a[b*NB*2+1]].filter(i=>i>=0);
       const proaW=pr.length?pr.reduce((s,i)=>s+wt[i],0)/pr.length:0;
       let sd=0;if(benchExp.length>1){const mu=benchExp.reduce((x,y)=>x+y,0)/benchExp.length;sd=Math.sqrt(benchExp.reduce((x,y)=>x+(y-mu)*(y-mu),0)/benchExp.length)}
-      total+=W.lat*dLat/3+W.alt*dAlt/3+W.marca*(mk.length?5-marcaExp:0)+W.mix*(mixPen+sd*0.8)+W.proa*(pr.length?Math.max(0,proaW-meanW)/3:0);
+      total+=W.lat*dLat/3+W.marca*(5-marcaExp)+W.mix*(mixPen+sd*0.8)+W.proa*(pr.length?Math.max(0,proaW-meanW)/3:0);
+      total+=100*Math.max(0,MIN_CREW-cnt)+10*Math.max(0,Math.abs(nB-nE)-1)+30*(2-mk.length)+3*half;
       boatExp.push(cnt?expSum/cnt:0);
-      if(detail)per.push({wB,wE,dLat,dAlt,marcaExp});
+      if(detail)per.push({wB,wE,nB,nE,cnt,dLat,marcaExp});
     }
     if(boats===2)total+=cfg.split==="eq"?6*Math.abs(boatExp[0]-boatExp[1]):6*Math.max(0,boatExp[1]-boatExp[0]+0.6);
-    total+=40*Math.max(0,empties-forcedEmpty);
+    total+=1000*Math.min(empties,n-seated);
     return detail?{total,per,boatExp}:total;
   }
   function randomInit(){
@@ -480,7 +501,20 @@ function solve(rw,cfg){
   const minD=Math.max(2,Math.round(SEATS*0.25)),pick=[];
   for(const s of all){if(pick.length>=5)break;if(pick.every(p=>diff(p.a,s.a)>=minD))pick.push(s)}
   for(const s of all){if(pick.length>=5)break;if(!pick.includes(s)&&pick.every(p=>diff(p.a,s.a)>=2))pick.push(s)}
-  return pick.map(s=>({a:s.a,detail:cost(s.a,true),SEATS}));
+  // Cambios sugeridos: cada reserva entra por el remero cuya salida empeora menos la alineación
+  function changes(a){
+    const base=cost(a),res=a.slice(SEATS).filter(i=>i>=0),cands=[];
+    for(const r of res)for(let p=0;p<SEATS;p++){
+      const o=a[p];if(o<0||!ok(r,p))continue;
+      const b2=a.slice();b2[p]=r;b2[a.indexOf(r,SEATS)]=o;
+      const d=cost(b2,true);cands.push({inn:r,out:o,p,delta:d.total-base,dLat:d.per[Math.floor(p/SEATS_PER)].dLat});
+    }
+    cands.sort((x,y)=>x.delta-y.delta);
+    const usedIn=new Set(),usedOut=new Set(),out=[];
+    for(const c of cands){if(usedIn.has(c.inn)||usedOut.has(c.out))continue;usedIn.add(c.inn);usedOut.add(c.out);out.push(c)}
+    return out;
+  }
+  return pick.map(s=>({a:s.a,detail:cost(s.a,true),SEATS,changes:changes(s.a)}));
 }
 window.__solve=solve; window.__rosterFromCSV=rosterFromCSV; window.__loadRoster=loadRoster;
 
@@ -489,7 +523,7 @@ function coxName(cfg,b){const id=cfg.cox[b];const r=id&&(lastResults.allRoster.f
 function renderResults(){
   const box=$("#results");
   if(!lastResults){box.innerHTML='<div class="empty"><h3>Sin alineaciones todavía</h3><p>Marca quién ha venido a la sesión y pulsa Generar alineaciones.</p></div>';return}
-  const {sols,rw,cfg}=lastResults,nb=cfg.benches;
+  const {sols,rw,cfg}=lastResults,nb=NB;
   if(!sols.length){box.innerHTML='<div class="empty"><h3>No hay alineación posible</h3><p>Revisa las bandas de los asistentes.</p></div>';return}
   box.innerHTML=sols.map((s,si)=>{
     let boatsH="";
@@ -497,13 +531,13 @@ function renderResults(){
       const d=s.detail.per[b],rows=[];
       for(let k=0;k<nb;k++){
         const pB=(b*nb+k)*2;
-        const seat=(i,side)=>i<0?`<div class="seat ${side} void">Plaza vacía</div>`:`<div class="seat ${side}"><span class="nm">${esc(rw[i].nombre)}</span><span class="d">${expDots(rw[i].exp)} ${rw[i].altura} cm · ${rw[i].peso} kg</span></div>`;
+        const seat=(i,side)=>i<0?`<div class="seat ${side} void">Plaza vacía</div>`:`<div class="seat ${side}"><span class="nm">${esc(rw[i].nombre)}</span><span class="d">${expDots(rw[i].exp)} ${rw[i].peso} kg</span></div>`;
         const tag=k===nb-1?"Marca":k===0?"Proa":"";
         rows.push(`<div class="bench">${seat(s.a[pB],"B")}<div class="bench-n"><b>${k+1}</b>${tag}</div>${seat(s.a[pB+1],"E")}</div>`);
       }
       const mc=(v,g,bad)=>v<=g?"ok":v>=bad?"bad":"";
       boatsH+=`<div class="boat">
-        ${cfg.boats>1?`<div class="boat-title"><span>Llaüt ${b+1}</span><span class="num">exp. media ${s.detail.boatExp[b].toFixed(1)}</span></div>`:""}
+        <div class="boat-title"><span>${cfg.boats>1?`Llaüt ${b+1} · `:""}${d.cnt} remeros</span><span class="num">exp. media ${s.detail.boatExp[b].toFixed(1)}</span></div>
         <div class="hull"><span class="bow-lbl">PROA</span>
           <div class="sides-lbl"><span>BABOR</span><span></span><span>ESTRIBOR</span></div>
           ${rows.join("")}
@@ -513,7 +547,7 @@ function renderResults(){
         <div class="metrics">
           <div class="m ${mc(d.dLat,3,8)}"><small>Peso babor / estribor</small><b>${Math.round(d.wB)} / ${Math.round(d.wE)} kg</b></div>
           <div class="m ${mc(d.dLat,3,8)}"><small>Diferencia lateral</small><b>${d.dLat.toFixed(1)} kg</b></div>
-          <div class="m ${mc(d.dAlt,4,9)}"><small>Dif. altura por banco</small><b>${d.dAlt.toFixed(1)} cm</b></div>
+          <div class="m ${Math.abs(d.nB-d.nE)<=1?"":"bad"}"><small>Remeros babor / estribor</small><b>${d.nB} / ${d.nE}</b></div>
           <div class="m ${d.marcaExp>=4?"ok":d.marcaExp&&d.marcaExp<3?"bad":""}"><small>Experiencia en marca</small><b>${d.marcaExp?d.marcaExp.toFixed(1):"—"} / 5</b></div>
         </div>
       </div>`;
@@ -524,12 +558,15 @@ function renderResults(){
         <div class="row"><button class="btn" data-copy="${si}">Copiar</button><button class="btn primary" data-share="${si}">Compartir</button></div></div>
       <div class="boats">${boatsH}</div>
       ${resv.length?`<p class="reserve"><b>Reserva:</b> ${resv.map(esc).join(", ")}</p>`:""}
+      ${s.changes.length?`<div class="changes"><span class="lbl">Cambios sugeridos</span>${s.changes.map(c=>`<div class="chg"><span><b>${esc(rw[c.inn].nombre)}</b> entra por <b>${esc(rw[c.out].nombre)}</b></span><span class="hint">${chgWhere(c,cfg)} · lateral ${c.dLat.toFixed(1)} kg</span></div>`).join("")}</div>`:""}
       <span class="score">penalización ${s.detail.total.toFixed(1)}</span>
     </article>`;
   }).join("");
 }
+function chgWhere(c,cfg){const b=Math.floor(c.p/SEATS_PER),k=Math.floor((c.p%SEATS_PER)/2);
+  return `${c.p%2?"estribor":"babor"}, banco ${k+1}${k===NB-1?" (marca)":k===0?" (proa)":""}${cfg.boats>1?`, llaüt ${b+1}`:""}`}
 function solText(si){
-  const {sols,rw,cfg}=lastResults,s=sols[si],nb=cfg.benches,L=[];
+  const {sols,rw,cfg}=lastResults,s=sols[si],nb=NB,L=[];
   const d=new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"});
   L.push(`Alineación llaüt · ${d}`);
   for(let b=0;b<cfg.boats;b++){
@@ -540,6 +577,7 @@ function solText(si){
     L.push(`Patrón: ${coxName(cfg,b)||"sin asignar"}`);
   }
   const resv=s.a.slice(s.SEATS).filter(i=>i>=0).map(i=>rw[i].nombre);if(resv.length)L.push(`\nReserva: ${resv.join(", ")}`);
+  if(s.changes.length){L.push("Cambios:");s.changes.forEach(c=>L.push(`- ${rw[c.inn].nombre} entra por ${rw[c.out].nombre} (${chgWhere(c,cfg)})`))}
   L.push("(Babor | Estribor)");
   return L.join("\n");
 }
@@ -549,7 +587,7 @@ function renderRoster(){
   $("#r-count").textContent=roster.length;
   $("#issues").innerHTML=issues.map(t=>`<div>${esc(t)}</div>`).join("");
   $("#roster").innerHTML=roster.length?roster.slice().sort(byName).map(r=>`<div class="ritem"><span style="min-width:0"><span class="nm">${esc(r.nombre)}</span>
-    <span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span>${r.patron?" · Patrón":""}</span></span>
+    <span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura?r.altura+" cm · ":""}${r.peso} kg</span>${r.patron?" · Patrón":""}</span></span>
     <span class="side ${r.banda}">${BANDA_TXT[r.banda]}</span></div>`).join("")
     :'<div class="empty"><h3>Plantilla vacía</h3><p>Añade los remeros en la hoja de Google, una fila por persona, y pulsa Actualizar.</p></div>';
   $("#src").value=sheetUrl();
@@ -573,13 +611,12 @@ $("#att-list").addEventListener("click",e=>{const b=e.target.closest("button[dat
 $("#all-on").onclick=()=>{const s=new Set(S.att);visibleRoster().forEach(r=>s.add(r.id));S.att=[...s];saveS();renderAtt()};
 $("#all-off").onclick=()=>{S.att=[];saveS();renderAtt()};
 $("#seg-boats").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;S.boats=+b.dataset.v;saveS();renderCox();renderNotes()});
-$("#benches").onchange=e=>{S.benches=+e.target.value;saveS();renderNotes()};
 $("#split").onchange=e=>{S.split=e.target.value;saveS()};
 $("#cox-row").addEventListener("change",e=>{const s=e.target.closest("select");if(!s)return;S.cox[+s.dataset.b]=s.value;saveS();renderNotes()});
 $("#sliders").addEventListener("input",e=>{const k=e.target.dataset.k;if(!k)return;S.w[k]=+e.target.value;$("#o-"+k).textContent=e.target.value;saveS()});
 $("#go").onclick=()=>{
-  const rw=rowersForSession();if(rw.length<2)return;
-  const cfg={boats:S.boats,benches:S.benches,split:S.split,w:{...S.w},cox:S.cox.slice(0,S.boats)};
+  const P=plan(),rw=P.rw;if(rw.length<MIN_CREW)return;
+  const cfg={boats:P.boats,split:S.split,w:{...S.w},cox:P.cox};
   $("#go").disabled=true;$("#go").textContent="Calculando…";
   setTimeout(()=>{
     lastResults={sols:solve(rw,cfg),rw,cfg,allRoster:roster.slice()};renderResults();
