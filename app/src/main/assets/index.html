@@ -216,7 +216,7 @@ input[type=range]{accent-color:var(--accent);width:100%}
         <summary class="hint" style="font-weight:700">Cambiar la hoja de origen</summary>
         <div class="block" style="margin-top:10px">
           <input type="text" id="src" autocomplete="off" spellcheck="false">
-          <p class="hint">Pega el enlace de otra hoja de Google compartida como «Cualquier persona con el enlace». La primera fila debe tener las columnas Nombre, Banda, Experiencia, Altura, Peso, Equipo y Patrón.</p>
+          <p class="hint">Pega el enlace de otra hoja de Google compartida como «Cualquier persona con el enlace». Debe tener una pestaña por categoría (VM, VF, ASM, ASF) con las columnas Nombre, Banda, Experiencia, Altura, Peso y Patrón.</p>
           <div class="row"><button class="btn" id="src-save">Usar esta hoja</button><button class="linkbtn" id="src-reset">Volver a la hoja del club</button></div>
         </div>
       </details>
@@ -229,7 +229,8 @@ input[type=range]{accent-color:var(--accent);width:100%}
 <script>
 (function(){
 "use strict";
-const DEFAULT_SHEET="1s0j6QjuCBdd_Vzfb1U6ahFyPdvkTQKzn-35Xb7QJYoE";
+const DEFAULT_SHEET="1Kyju8S_TDjbB5y3_qlLWPCW-l-kZeusFBq46OqLKnEU";
+const OLD_SHEETS=["1s0j6QjuCBdd_Vzfb1U6ahFyPdvkTQKzn-35Xb7QJYoE"];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -242,7 +243,9 @@ let roster=[],issues=[];
 const cache=LS.get("crcv-cache",null);
 if(cache&&Array.isArray(cache.roster)){roster=cache.roster;issues=cache.issues||[]}
 const S=Object.assign({att:[],boats:1,benches:4,cox:["",""],split:"eq",teams:[],w:{lat:3,alt:2,marca:2,mix:2,proa:1},sheet:DEFAULT_SHEET,gid:""},LS.get("crcv-sesion",{}));
+if(OLD_SHEETS.includes(S.sheet)){S.sheet=DEFAULT_SHEET;S.gid=""}
 const saveS=()=>LS.set("crcv-sesion",S);
+roster.forEach(r=>{if(!Array.isArray(r.equipos))r.equipos=r.equipo?[r.equipo]:[]});
 let lastResults=null;
 
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2600)}
@@ -261,6 +264,7 @@ function openUrl(u){if(N&&N.openUrl)N.openUrl(u);else window.open(u,"_blank")}
 
 /* ---------- Lectura de la hoja ---------- */
 function csvUrl(){return "https://docs.google.com/spreadsheets/d/"+S.sheet+"/export?format=csv"+(S.gid?"&gid="+S.gid:"")}
+function tabUrl(tab){return "https://docs.google.com/spreadsheets/d/"+S.sheet+"/gviz/tq?tqx=out:csv&headers=1&sheet="+encodeURIComponent(tab)}
 function sheetUrl(){return "https://docs.google.com/spreadsheets/d/"+S.sheet+"/edit"+(S.gid?"#gid="+S.gid:"")}
 function parseCSV(text){
   const rows=[];let row=[],f="",q=false;
@@ -276,41 +280,73 @@ function parseCSV(text){
 const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
 const num=s=>parseFloat(String(s||"").trim().replace(",","."));
 function parseBanda(s){const v=norm(s);if(["b","babor","bab","port"].includes(v))return"B";if(["e","estribor","est","starboard"].includes(v))return"E";if(["a","ambas","ambos","ab","be","eb","indiferente"].includes(v))return"A";return null}
-function rosterFromCSV(text){
+function rosterFromCSV(text,tab){
   if(/^\s*</.test(text))throw new Error("La hoja no es accesible. Comprueba que está compartida como «Cualquier persona con el enlace».");
   const rows=parseCSV(text).filter(r=>r.some(c=>c.trim()!==""));
-  if(!rows.length)return{roster:[],issues:[]};
+  if(!rows.length)return{roster:[],issues:[],noTable:true};
   const head=rows[0].map(norm);
   const find=(...ks)=>head.findIndex(h=>ks.includes(h));
   const col={nombre:find("nombre","remero","remera","nom"),banda:find("banda","lado"),exp:find("experiencia","exp","nivel"),altura:find("altura","talla","alturacm"),peso:find("peso","pesokg"),equipo:find("equipo","categoria"),patron:find("patron","patrona","timonel")};
+  if(tab&&col.nombre<0)return{roster:[],issues:[],noTable:true};
   const miss=["nombre","banda","altura","peso"].filter(k=>col[k]<0);
-  if(miss.length)throw new Error("Faltan columnas en la hoja: "+miss.join(", ")+".");
+  if(miss.length)throw new Error("Faltan columnas"+(tab?" en la pestaña "+tab:" en la hoja")+": "+miss.join(", ")+".");
+  const P=tab?tab+", fila ":"Fila ";
   const out=[],iss=[],seen=new Set();
   rows.slice(1).forEach((r,ix)=>{
     const line=ix+2,g=k=>col[k]>=0?(r[col[k]]||"").trim():"";
     const nombre=g("nombre").replace(/\s+/g," ");
-    if(!nombre){iss.push(`Fila ${line}: sin nombre, se ignora.`);return}
+    if(!nombre){iss.push(`${P}${line}: sin nombre, se ignora.`);return}
     const id=norm(nombre);
-    if(seen.has(id)){iss.push(`Fila ${line}: «${nombre}» está repetido, se ignora.`);return}
+    if(seen.has(id)){iss.push(`${P}${line}: «${nombre}» está repetido, se ignora.`);return}
     let alt=num(g("altura"));if(alt>0&&alt<3)alt=alt*100;
     const peso=num(g("peso"));
-    if(!(alt>=120&&alt<=230)){iss.push(`Fila ${line}: altura de «${nombre}» no válida, se ignora.`);return}
-    if(!(peso>=30&&peso<=160)){iss.push(`Fila ${line}: peso de «${nombre}» no válido, se ignora.`);return}
-    let banda=parseBanda(g("banda"));if(!banda){iss.push(`Fila ${line}: banda de «${nombre}» no reconocida, se toma como Ambas.`);banda="A"}
-    let exp=parseInt(g("exp"),10);if(!(exp>=1&&exp<=5)){if(g("exp"))iss.push(`Fila ${line}: experiencia de «${nombre}» fuera de 1–5, se toma 3.`);exp=3}
-    const eq=g("equipo").toUpperCase();
+    if(!(alt>=120&&alt<=230)){iss.push(`${P}${line}: altura de «${nombre}» no válida, se ignora.`);return}
+    if(!(peso>=30&&peso<=160)){iss.push(`${P}${line}: peso de «${nombre}» no válido, se ignora.`);return}
+    let banda=parseBanda(g("banda"));if(!banda){iss.push(`${P}${line}: banda de «${nombre}» no reconocida, se toma como Ambas.`);banda="A"}
+    let exp=parseInt(g("exp"),10);if(!(exp>=1&&exp<=5)){if(g("exp"))iss.push(`${P}${line}: experiencia de «${nombre}» fuera de 1–5, se toma 3.`);exp=3}
+    const eq=tab||g("equipo").toUpperCase();
     const pt=norm(g("patron"));
     seen.add(id);
-    out.push({id,nombre,banda,exp,altura:Math.round(alt),peso:Math.round(peso*10)/10,equipo:TEAMS.includes(eq)?eq:"",patron:["si","s","x","1","yes","y","true","patron","patrona"].includes(pt)});
+    out.push({id,nombre,banda,exp,altura:Math.round(alt),peso:Math.round(peso*10)/10,equipos:TEAMS.includes(eq)?[eq]:[],patron:["si","s","x","1","yes","y","true","patron","patrona"].includes(pt)});
   });
   return{roster:out,issues:iss};
+}
+async function loadRoster(){
+  const res=await Promise.allSettled(TEAMS.map(t=>httpGet(tabUrl(t))));
+  if(res.every(x=>x.status==="rejected"))throw new Error("offline");
+  const texts=res.map(x=>x.status==="fulfilled"?x.value:null);
+  if(texts.every(t=>t===null||/^\s*</.test(t)))throw new Error("La hoja no es accesible. Comprueba que está compartida como «Cualquier persona con el enlace».");
+  const byId=new Map(),iss=[];let tabsFound=0;
+  const seenText=new Map();
+  for(let i=0;i<TEAMS.length;i++){
+    const t=texts[i],tab=TEAMS[i];
+    if(t===null||/^\s*</.test(t))continue;
+    const r=rosterFromCSV(t,tab);
+    if(r.noTable)continue;
+    if(r.roster.length&&seenText.has(t)){iss.push(`Las pestañas ${seenText.get(t)} y ${tab} tienen exactamente los mismos datos. Comprueba que Instrucciones sigue siendo la primera pestaña.`);continue}
+    seenText.set(t,tab);tabsFound++;
+    iss.push(...r.issues);
+    for(const x of r.roster){
+      const prev=byId.get(x.id);
+      if(!prev){byId.set(x.id,x);continue}
+      if(!prev.equipos.includes(tab))prev.equipos.push(tab);
+      if(prev.banda!==x.banda||prev.exp!==x.exp||prev.altura!==x.altura||prev.peso!==x.peso)
+        iss.push(`«${x.nombre}» tiene datos distintos en ${prev.equipos[0]} y ${tab}; se usan los de ${prev.equipos[0]}.`);
+      prev.patron=prev.patron||x.patron;
+    }
+  }
+  if(!tabsFound){
+    // Hoja sin pestañas de categoría: una sola tabla con columna Equipo
+    const r=rosterFromCSV(await httpGet(csvUrl()));
+    return{roster:r.roster,issues:r.issues};
+  }
+  return{roster:[...byId.values()],issues:iss};
 }
 let syncing=false;
 async function sync(manual){
   if(syncing)return;syncing=true;$("#sync").disabled=true;$("#sync").textContent="Actualizando…";
   try{
-    const txt=await httpGet(csvUrl());
-    const r=rosterFromCSV(txt);
+    const r=await loadRoster();
     roster=r.roster;issues=r.issues;
     LS.set("crcv-cache",{roster,issues,at:Date.now(),sheet:S.sheet});
     if(manual)toast(`Plantilla actualizada: ${roster.length} remeros`);
@@ -339,17 +375,17 @@ const byName=(a,b)=>a.nombre.localeCompare(b.nombre,"es");
 function expDots(n){let s='<span class="exp">';for(let i=1;i<=5;i++)s+='<i class="'+(i<=n?"on":"")+'"></i>';return s+"</span>"}
 function attendees(){const set=new Set(S.att);return roster.filter(r=>set.has(r.id))}
 function renderTeams(){
-  const present=TEAMS.filter(t=>roster.some(r=>r.equipo===t));
+  const present=TEAMS.filter(t=>roster.some(r=>r.equipos.includes(t)));
   S.teams=S.teams.filter(t=>present.includes(t));
   $("#team-filter").innerHTML=present.map(t=>`<button class="chip" data-t="${t}" aria-pressed="${S.teams.includes(t)}">${t}</button>`).join("")
     +(present.length?`<button class="chip" data-t="" aria-pressed="${S.teams.length===0}">Todos</button>`:"");
 }
-function visibleRoster(){return roster.filter(r=>!S.teams.length||S.teams.includes(r.equipo)).sort(byName)}
+function visibleRoster(){return roster.filter(r=>!S.teams.length||r.equipos.some(e=>S.teams.includes(e))).sort(byName)}
 function renderAtt(){
   const set=new Set(S.att);const vis=visibleRoster();
   $("#att-list").innerHTML=vis.length?vis.map(r=>`<button data-id="${esc(r.id)}" aria-pressed="${set.has(r.id)}">
       <span class="box">${set.has(r.id)?"✓":""}</span>
-      <span style="min-width:0"><span class="nm">${esc(r.nombre)}</span><span class="meta">${r.equipo?esc(r.equipo)+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span></span></span>
+      <span style="min-width:0"><span class="nm">${esc(r.nombre)}</span><span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span></span></span>
       <span class="side ${r.banda}">${r.banda==="A"?"B/E":r.banda}</span></button>`).join("")
     :'<p class="hint">No hay remeros. Añádelos en la hoja de Google y pulsa Actualizar en la pestaña Plantilla.</p>';
   const at=attendees();
@@ -446,7 +482,7 @@ function solve(rw,cfg){
   for(const s of all){if(pick.length>=5)break;if(!pick.includes(s)&&pick.every(p=>diff(p.a,s.a)>=2))pick.push(s)}
   return pick.map(s=>({a:s.a,detail:cost(s.a,true),SEATS}));
 }
-window.__solve=solve; window.__rosterFromCSV=rosterFromCSV;
+window.__solve=solve; window.__rosterFromCSV=rosterFromCSV; window.__loadRoster=loadRoster;
 
 /* ---------- Render: resultados ---------- */
 function coxName(cfg,b){const id=cfg.cox[b];const r=id&&(lastResults.allRoster.find(x=>x.id===id));return r?r.nombre:""}
@@ -513,7 +549,7 @@ function renderRoster(){
   $("#r-count").textContent=roster.length;
   $("#issues").innerHTML=issues.map(t=>`<div>${esc(t)}</div>`).join("");
   $("#roster").innerHTML=roster.length?roster.slice().sort(byName).map(r=>`<div class="ritem"><span style="min-width:0"><span class="nm">${esc(r.nombre)}</span>
-    <span class="meta">${r.equipo?esc(r.equipo)+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span>${r.patron?" · Patrón":""}</span></span>
+    <span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura} cm · ${r.peso} kg</span>${r.patron?" · Patrón":""}</span></span>
     <span class="side ${r.banda}">${BANDA_TXT[r.banda]}</span></div>`).join("")
     :'<div class="empty"><h3>Plantilla vacía</h3><p>Añade los remeros en la hoja de Google, una fila por persona, y pulsa Actualizar.</p></div>';
   $("#src").value=sheetUrl();

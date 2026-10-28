@@ -16,17 +16,18 @@ Requiere Android 7 o superior.
 
 ## Plantilla de remeros
 
-La app lee la hoja de Google *Plantilla Tripulaciones Llaüt* (carpeta Coordinacion Deportiva de administracion@removalencia.com). Columnas:
+La app lee la hoja de Google *Plantilla Tripulaciones Llaüt* (carpeta Coordinacion Deportiva de administracion@removalencia.com). Tiene una pestaña por categoría (VF, ASM, ASF; se puede añadir VM) y la app asigna la categoría por el nombre de la pestaña. La pestaña Instrucciones debe seguir siendo la primera.
 
 | Columna | Valores |
 |---|---|
-| Nombre | Nombre y apellido, único |
+| Nombre | Nombre y apellido, único dentro de la pestaña |
 | Banda | B (babor), E (estribor) o A (ambas) |
 | Experiencia | 1 (iniciación) a 5 (experto) |
 | Altura | cm |
 | Peso | kg |
-| Equipo | VM, VF, ASM o ASF |
 | Patrón | sí / no |
+
+Un remero que esté en dos categorías aparece en las dos pestañas con el mismo nombre; la app lo une en una sola ficha.
 
 La hoja debe estar compartida como «Cualquier persona con el enlace · Lector». La app la descarga al abrirse y con el botón Actualizar; sin conexión usa la última copia.
 
