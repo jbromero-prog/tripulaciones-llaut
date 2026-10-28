@@ -126,6 +126,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .seat.E{border-right:4px solid var(--estribor);border-radius:0 8px 8px 0;text-align:right;align-items:flex-end}
 .seat .nm{max-width:100%}
 .seat .d{font-size:11px;color:var(--muted);font-family:var(--f-data)}
+.tb{font-size:11px;color:var(--accent);font-weight:700}
+.tb b{font-family:var(--f-data);font-weight:500}
+.tb.none{color:var(--muted);font-weight:400}
 .seat.void{color:var(--muted);font-style:italic;justify-content:center}
 .exp{display:inline-flex;gap:2px;vertical-align:middle}
 .exp i{width:6px;height:6px;border-radius:50%;background:var(--line)}
@@ -212,6 +215,7 @@ input[type=range]{accent-color:var(--accent);width:100%}
         <div class="row"><button class="btn" id="open-sheet">Abrir hoja</button><button class="btn primary" id="sync">Actualizar</button></div>
       </div>
       <p class="hint" id="sync-info"></p>
+      <p class="hint" id="rig-info"></p>
       <div class="issues" id="issues"></div>
       <p class="hint">Las altas, bajas y cambios se hacen en la hoja de Google. La app la descarga al abrirse y al pulsar Actualizar; sin conexión usa la última copia.</p>
       <details>
@@ -243,7 +247,8 @@ const N=window.Native||null;
 /* ---------- Estado ---------- */
 let roster=[],issues=[];
 const cache=LS.get("crcv-cache",null);
-if(cache&&Array.isArray(cache.roster)){roster=cache.roster;issues=cache.issues||[]}
+let rig=[];
+if(cache&&Array.isArray(cache.roster)){roster=cache.roster;issues=cache.issues||[];rig=cache.rig||[]}
 const S=Object.assign({att:[],boats:1,cox:["",""],split:"eq",teams:[],w:{lat:3,marca:2,mix:2,proa:1},sheet:DEFAULT_SHEET,gid:""},LS.get("crcv-sesion",{}));
 if(OLD_SHEETS.includes(S.sheet)){S.sheet=DEFAULT_SHEET;S.gid=""}
 const saveS=()=>LS.set("crcv-sesion",S);
@@ -289,7 +294,7 @@ function rosterFromCSV(text,tab){
   if(!rows.length)return{roster:[],issues:[],noTable:true};
   const head=rows[0].map(norm);
   const find=(...ks)=>head.findIndex(h=>ks.includes(h));
-  const col={nombre:find("nombre","remero","remera","nom"),banda:find("banda","lado"),exp:find("experiencia","exp","nivel"),altura:find("altura","talla","alturacm"),peso:find("peso","pesokg"),equipo:find("equipo","categoria"),patron:find("patron","patrona","timonel")};
+  const col={nombre:find("nombre","remero","remera","nom"),banda:find("banda","lado"),exp:find("experiencia","exp","nivel"),altura:find("altura","talla","alturacm"),peso:find("peso","pesokg"),equipo:find("equipo","categoria"),patron:find("patron","patrona","timonel"),tolete:head.findIndex(h=>h.startsWith("tolete")||h==="tb")};
   if(tab&&col.nombre<0)return{roster:[],issues:[],noTable:true};
   const miss=["nombre","banda","peso"].filter(k=>col[k]<0);
   if(miss.length)throw new Error("Faltan columnas"+(tab?" en la pestaña "+tab:" en la hoja")+": "+miss.join(", ")+".");
@@ -304,6 +309,8 @@ function rosterFromCSV(text,tab){
     let alt=num(g("altura"));if(alt>0&&alt<3)alt=alt*100;
     const peso=num(g("peso"));
     if(g("altura")&&!(alt>=120&&alt<=230))iss.push(`${P}${line}: altura de «${nombre}» no válida, se deja en blanco.`);
+    else if(!g("altura"))iss.push(`${P}${line}: «${nombre}» no tiene altura.`);
+    const tol=num(g("tolete"));
     if(!(alt>=120&&alt<=230))alt=0;
     if(!(peso>=30&&peso<=160)){iss.push(`${P}${line}: peso de «${nombre}» no válido, se ignora.`);return}
     let banda=parseBanda(g("banda"));if(!banda){iss.push(`${P}${line}: banda de «${nombre}» no reconocida, se toma como Ambas.`);banda="A"}
@@ -311,11 +318,39 @@ function rosterFromCSV(text,tab){
     const eq=tab||g("equipo").toUpperCase();
     const pt=norm(g("patron"));
     seen.add(id);
-    out.push({id,nombre,banda,exp,altura:Math.round(alt),peso:Math.round(peso*10)/10,equipos:TEAMS.includes(eq)?[eq]:[],patron:["si","s","x","1","yes","y","true","patron","patrona"].includes(pt)});
+    out.push({id,nombre,banda,exp,altura:Math.round(alt),peso:Math.round(peso*10)/10,equipos:TEAMS.includes(eq)?[eq]:[],patron:["si","s","x","1","yes","y","true","patron","patrona"].includes(pt),tolete:tol>0?Math.round(tol*10)/10:0});
   });
   return{roster:out,issues:iss};
 }
+function rigFromCSV(text){
+  if(!text||/^\s*</.test(text))return null;
+  const rows=parseCSV(text).filter(r=>r.some(c=>c.trim()!==""));if(!rows.length)return null;
+  const head=rows[0].map(norm);
+  const iTol=head.findIndex(h=>h.startsWith("tolete")||h==="tb"||h.startsWith("distancia"));
+  const iDes=head.findIndex(h=>h==="alturadesde"||h==="desde"||h==="alturamin"||h==="alturaminima");
+  const iHas=head.findIndex(h=>h==="alturahasta"||h==="hasta"||h==="alturamax"||h==="alturamaxima");
+  const iAlt=head.findIndex(h=>h==="altura"||h==="alturacm");
+  if(iTol<0||(iDes<0&&iAlt<0))return null;
+  const out=[];
+  for(const r of rows.slice(1)){
+    const tol=num(r[iTol]);if(!(tol>0))continue;
+    let lo=num(r[iDes>=0?iDes:iAlt]),hi=iHas>=0?num(r[iHas]):NaN;
+    if(lo>0&&lo<3)lo*=100;if(hi>0&&hi<3)hi*=100;
+    if(!(lo>0))continue;
+    out.push({lo,hi:hi>0?hi:null,tol:Math.round(tol*10)/10});
+  }
+  out.sort((a,b)=>a.lo-b.lo);
+  return out.length?out:null;
+}
+function toleteFor(r){
+  if(r.tolete>0)return r.tolete;
+  if(!r.altura||!rig.length)return 0;
+  const h=r.altura;
+  if(rig.some(x=>x.hi!=null)){const m=rig.find(x=>h>=x.lo&&h<=(x.hi??Infinity));return m?m.tol:0}
+  let m=null;for(const x of rig)if(x.lo<=h)m=x;return(m||rig[0]).tol;
+}
 async function loadRoster(){
+  const rigP=httpGet(tabUrl("Reglaje")).then(rigFromCSV,()=>undefined);
   const res=await Promise.allSettled(TEAMS.map(t=>httpGet(tabUrl(t))));
   if(res.every(x=>x.status==="rejected"))throw new Error("offline");
   const texts=res.map(x=>x.status==="fulfilled"?x.value:null);
@@ -339,20 +374,21 @@ async function loadRoster(){
       prev.patron=prev.patron||x.patron;
     }
   }
+  const rg=await rigP;
   if(!tabsFound){
     // Hoja sin pestañas de categoría: una sola tabla con columna Equipo
     const r=rosterFromCSV(await httpGet(csvUrl()));
-    return{roster:r.roster,issues:r.issues};
+    return{roster:r.roster,issues:r.issues,rig:rg};
   }
-  return{roster:[...byId.values()],issues:iss};
+  return{roster:[...byId.values()],issues:iss,rig:rg};
 }
 let syncing=false;
 async function sync(manual){
   if(syncing)return;syncing=true;$("#sync").disabled=true;$("#sync").textContent="Actualizando…";
   try{
     const r=await loadRoster();
-    roster=r.roster;issues=r.issues;
-    LS.set("crcv-cache",{roster,issues,at:Date.now(),sheet:S.sheet});
+    roster=r.roster;issues=r.issues;if(r.rig!==undefined)rig=r.rig||[];
+    LS.set("crcv-cache",{roster,issues,rig,at:Date.now(),sheet:S.sheet});
     if(manual)toast(`Plantilla actualizada: ${roster.length} remeros`);
     setStatus("ok");
   }catch(e){
@@ -520,6 +556,8 @@ window.__solve=solve; window.__rosterFromCSV=rosterFromCSV; window.__loadRoster=
 
 /* ---------- Render: resultados ---------- */
 function coxName(cfg,b){const id=cfg.cox[b];const r=id&&(lastResults.allRoster.find(x=>x.id===id));return r?r.nombre:""}
+function tbTag(r){const t=toleteFor(r);return t?`<span class="tb">Tolete–bancada <b>${fmtCm(t)}</b></span>`:`<span class="tb none">Tolete–bancada sin dato</span>`}
+const fmtCm=v=>String(v).replace(".",",")+" cm";
 function renderResults(){
   const box=$("#results");
   if(!lastResults){box.innerHTML='<div class="empty"><h3>Sin alineaciones todavía</h3><p>Marca quién ha venido a la sesión y pulsa Generar alineaciones.</p></div>';return}
@@ -531,7 +569,7 @@ function renderResults(){
       const d=s.detail.per[b],rows=[];
       for(let k=0;k<nb;k++){
         const pB=(b*nb+k)*2;
-        const seat=(i,side)=>i<0?`<div class="seat ${side} void">Plaza vacía</div>`:`<div class="seat ${side}"><span class="nm">${esc(rw[i].nombre)}</span><span class="d">${expDots(rw[i].exp)} ${rw[i].peso} kg</span></div>`;
+        const seat=(i,side)=>i<0?`<div class="seat ${side} void">Plaza vacía</div>`:`<div class="seat ${side}"><span class="nm">${esc(rw[i].nombre)}</span><span class="d">${expDots(rw[i].exp)} ${rw[i].altura?rw[i].altura+" cm · ":""}${rw[i].peso} kg</span>${tbTag(rw[i])}</div>`;
         const tag=k===nb-1?"Marca":k===0?"Proa":"";
         rows.push(`<div class="bench">${seat(s.a[pB],"B")}<div class="bench-n"><b>${k+1}</b>${tag}</div>${seat(s.a[pB+1],"E")}</div>`);
       }
@@ -571,23 +609,26 @@ function solText(si){
   L.push(`Alineación llaüt · ${d}`);
   for(let b=0;b<cfg.boats;b++){
     if(cfg.boats>1)L.push(`\nLLAÜT ${b+1}`);
-    for(let k=nb-1;k>=0;k--){const pB=(b*nb+k)*2,nm=i=>i<0?"(vacía)":rw[i].nombre;
+    for(let k=nb-1;k>=0;k--){const pB=(b*nb+k)*2,nm=i=>{if(i<0)return"(vacía)";const t=toleteFor(rw[i]);return rw[i].nombre+(t?` [${fmtCm(t)}]`:"")};
       const tag=k===nb-1?" (marca)":k===0?" (proa)":"";
       L.push(`Banco ${k+1}${tag}: ${nm(s.a[pB])} | ${nm(s.a[pB+1])}`)}
     L.push(`Patrón: ${coxName(cfg,b)||"sin asignar"}`);
   }
   const resv=s.a.slice(s.SEATS).filter(i=>i>=0).map(i=>rw[i].nombre);if(resv.length)L.push(`\nReserva: ${resv.join(", ")}`);
   if(s.changes.length){L.push("Cambios:");s.changes.forEach(c=>L.push(`- ${rw[c.inn].nombre} entra por ${rw[c.out].nombre} (${chgWhere(c,cfg)})`))}
-  L.push("(Babor | Estribor)");
+  L.push("(Babor | Estribor · entre corchetes, distancia tolete–bancada)");
   return L.join("\n");
 }
 
 /* ---------- Render: plantilla ---------- */
 function renderRoster(){
   $("#r-count").textContent=roster.length;
+  const rigMsg=rig.length?`Reglaje tolete–bancada: ${rig.length} tramos de altura (${rig.map(x=>x.hi!=null?`${x.lo}–${x.hi}`:`desde ${x.lo}`).join(", ")}).`:"Sin tabla de reglaje: crea en la hoja la pestaña «Reglaje» con las columnas Altura desde, Altura hasta y Tolete-bancada.";
+  const sinTb=roster.filter(r=>!toleteFor(r)).map(r=>r.nombre);
+  $("#rig-info").textContent=rigMsg+(rig.length&&sinTb.length?` Sin distancia calculada: ${sinTb.join(", ")}.`:"");
   $("#issues").innerHTML=issues.map(t=>`<div>${esc(t)}</div>`).join("");
   $("#roster").innerHTML=roster.length?roster.slice().sort(byName).map(r=>`<div class="ritem"><span style="min-width:0"><span class="nm">${esc(r.nombre)}</span>
-    <span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura?r.altura+" cm · ":""}${r.peso} kg</span>${r.patron?" · Patrón":""}</span></span>
+    <span class="meta">${r.equipos.length?esc(r.equipos.join("/"))+" · ":""}${expDots(r.exp)}<span class="num">${r.altura?r.altura+" cm · ":""}${r.peso} kg</span>${toleteFor(r)?" · T–B "+fmtCm(toleteFor(r)):""}${r.patron?" · Patrón":""}</span></span>
     <span class="side ${r.banda}">${BANDA_TXT[r.banda]}</span></div>`).join("")
     :'<div class="empty"><h3>Plantilla vacía</h3><p>Añade los remeros en la hoja de Google, una fila por persona, y pulsa Actualizar.</p></div>';
   $("#src").value=sheetUrl();

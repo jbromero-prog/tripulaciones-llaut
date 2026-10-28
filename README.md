@@ -23,9 +23,13 @@ La app lee la hoja de Google *Plantilla Tripulaciones Llaüt* (carpeta Coordinac
 | Nombre | Nombre y apellido, único dentro de la pestaña |
 | Banda | B (babor), E (estribor) o A (ambas) |
 | Experiencia | 1 (iniciación) a 5 (experto) |
-| Altura | cm (opcional, la app no la usa para alinear) |
+| Altura | cm; con ella se calcula la distancia tolete–bancada |
 | Peso | kg |
 | Patrón | sí / no |
+
+### Reglaje tolete–bancada
+
+Pestaña **Reglaje** con las columnas *Altura desde*, *Altura hasta* y *Tolete-bancada* (todo en cm), una fila por tramo de altura. La app muestra en cada plaza de la alineación la distancia que corresponde a la altura del remero. Si un remero necesita un valor propio, se añade la columna *Tolete-bancada* en su pestaña de categoría y ese valor tiene prioridad sobre la tabla.
 
 Un remero que esté en dos categorías aparece en las dos pestañas con el mismo nombre; la app lo une en una sola ficha.
 
